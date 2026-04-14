@@ -1,0 +1,16 @@
+[
+  {
+    "id": "geladeira",
+    "name": "Geladeira",
+    "description": "Geladeira para deixar a cerveja da visita e a carne do churrasco sempre geladinha",
+    "amount": 3000,
+    "image": "https://img.global.news.samsung.com/br/wp-content/uploads/2022/05/AF_SAMSUNG_KV_Sustentabilidade_Geladeira_RT46_68x38cm-1-e1652888692644.jpg"
+  },
+  {
+    "id": "1",
+    "name": "Fogão",
+    "description": "Fogão por indução para o miojo de sexta-feira",
+    "amount": 2000,
+    "image": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRkZIHc1nzXeGykgwa6R1jM9japm5DWdVCHOg&s"
+  }
+]

@@ -1,0 +1,44 @@
+[
+  {
+    "id": "jantar",
+    "name": "Jantar romântico",
+    "description": "Uma noite especial para celebrar o sim com muito sabor.",
+    "amount": 100,
+    "image": "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?auto=format&w=800&q=80"
+  },
+  {
+    "id": "espumante",
+    "name": "Brinde com espumante",
+    "description": "Um brinde à nova fase — saúde e amor!",
+    "amount": 80,
+    "image": "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&w=800&q=80"
+  },
+  {
+    "id": "noite-hotel",
+    "name": "Noite de hotel",
+    "description": "Contribua para uma estadia aconchegante na lua de mel.",
+    "amount": 350,
+    "image": "https://images.unsplash.com/photo-1631049307264-da0ec9d70304?auto=format&w=800&q=80"
+  },
+  {
+    "id": "passagem",
+    "name": "Trecho de passagem",
+    "description": "Ajude a colocar mais um carimbo no passaporte.",
+    "amount": 500,
+    "image": "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&w=800&q=80"
+  },
+  {
+    "id": "café",
+    "name": "Café da manhã na cama",
+    "description": "Começar o dia com carinho e croissants.",
+    "amount": 60,
+    "image": "https://images.unsplash.com/photo-1495314736024-fa5e6603a392?auto=format&w=800&q=80"
+  },
+  {
+    "id": "fotos",
+    "name": "Sessão de fotos",
+    "description": "Registrar memórias que vão durar para sempre.",
+    "amount": 200,
+    "image": "https://images.unsplash.com/photo-1606800052052-a45c64b1aa07?auto=format&w=800&q=80"
+  }
+]
