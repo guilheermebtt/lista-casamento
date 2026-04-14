@@ -20,8 +20,18 @@ export const paymentRouter = Router();
 const MAX_INSTALLMENTS = 12;
 const MP_PAYMENTS_URL = 'https://api.mercadopago.com/v1/payments';
 
-/** CPF de exemplo usado pelo próprio MP em tutoriais de teste (mesmo do Brick no frontend). */
-const MP_EXAMPLE_TEST_CPF = '12345678909';
+/** CPF do exemplo oficial da documentação MP (curl PIX). */
+const MP_EXAMPLE_TEST_CPF = '19119119100';
+
+/** Endereço de exemplo da documentação MP para payer.address (PIX BR). */
+const MP_EXAMPLE_PAYER_ADDRESS = {
+  zip_code: '06233200',
+  street_name: 'Av. das Nações Unidas',
+  street_number: '3003',
+  neighborhood: 'Bonfim',
+  city: 'Osasco',
+  federal_unit: 'SP',
+};
 
 /**
  * Access Token do .env (só servidor). Trim evita falha silenciosa; MP retorna erro 5 sem Bearer válido.
@@ -71,6 +81,38 @@ async function createPaymentRest(body) {
 }
 
 /**
+ * Cria pagamento via SDK oficial (envia headers PRODUCT_ID, TRACKING_ID, User-Agent, etc.).
+ * O fetch manual em createPaymentRest não replica isso; em PIX isso pode causar internal_error na API.
+ */
+async function createPaymentWithSdk(body) {
+  const client = getClient();
+  const paymentApi = new Payment(client);
+  const idempotencyKey = randomUUID();
+  try {
+    const data = await paymentApi.create({
+      body,
+      requestOptions: { idempotencyKey },
+    });
+    if (data && typeof data === 'object' && 'api_response' in data) {
+      const { api_response: _ar, ...rest } = data;
+      return rest;
+    }
+    return data;
+  } catch (e) {
+    const msg =
+      e?.message ||
+      e?.error ||
+      (Array.isArray(e?.cause) &&
+        e.cause.map((c) => c?.description || c?.code).filter(Boolean).join('; ')) ||
+      'Falha ao criar pagamento';
+    const err = new Error(msg);
+    err.statusCode = e?.status;
+    err.api = e;
+    throw err;
+  }
+}
+
+/**
  * PIX no BR: a API costuma devolver internal_error sem payer.identification (cartão já manda via Brick).
  * Nome/e-mail continuam sendo os do convidado; o documento segue o padrão de testes MP ou MERCADOPAGO_PIX_PAYER_CPF.
  */
@@ -104,6 +146,7 @@ function buildPayerForPix(email, buyerFullName) {
     first_name: first,
     last_name: last,
     identification,
+    address: { ...MP_EXAMPLE_PAYER_ADDRESS },
   };
 }
 
@@ -171,7 +214,7 @@ paymentRouter.post('/payments/pix', async (req, res) => {
         : undefined,
     };
 
-    const created = await createPaymentRest(body);
+    const created = await createPaymentWithSdk(body);
     const tid = created.point_of_interaction?.transaction_data;
     const pid = String(created.id);
 
@@ -204,7 +247,7 @@ paymentRouter.post('/payments/pix', async (req, res) => {
       ticket_url: tid?.ticket_url ?? null,
     });
   } catch (e) {
-    console.error('create pix error', e);
+    console.error('create pix error', e?.api || e);
     const msg = e?.cause?.message || e?.message || 'Falha ao criar pagamento';
     return res.status(502).json({ error: msg });
   }
