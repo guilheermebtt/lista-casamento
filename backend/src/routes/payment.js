@@ -20,9 +20,6 @@ export const paymentRouter = Router();
 const MAX_INSTALLMENTS = 12;
 const MP_PAYMENTS_URL = 'https://api.mercadopago.com/v1/payments';
 
-/** CPF do exemplo oficial da documentação MP (curl PIX). */
-const MP_EXAMPLE_TEST_CPF = '19119119100';
-
 /**
  * Access Token do .env (só servidor). Trim evita falha silenciosa; MP retorna erro 5 sem Bearer válido.
  */
@@ -39,23 +36,6 @@ function getMercadoPagoAccessToken() {
 
 function getClient() {
   return new MercadoPagoConfig({ accessToken: getMercadoPagoAccessToken() });
-}
-
-/**
- * Webhook do MP exige HTTPS; http:// normalizado para https://.
- * PIX: em várias contas a API devolve "http is unavailable for request create_ti" ao registrar webhook
- * mesmo com URL correta — por isso o PIX não envia notification_url por padrão (confirmação via polling no site).
- * Para reativar webhook no PIX: MERCADOPAGO_PIX_WEBHOOK=true e PUBLIC_URL=https://...
- */
-function mercadopagoNotificationUrl() {
-  const raw = process.env.PUBLIC_URL;
-  if (!raw || typeof raw !== 'string') return undefined;
-  let base = raw.trim().replace(/\/+$/, '');
-  if (base.startsWith('http://')) {
-    base = `https://${base.slice('http://'.length)}`;
-  }
-  if (!base.startsWith('https://')) return undefined;
-  return `${base}/api/webhooks/mercadopago`;
 }
 
 /**
@@ -88,43 +68,6 @@ async function createPaymentRest(body) {
 }
 
 /**
- * PIX no BR: a API costuma devolver internal_error sem payer.identification (cartão já manda via Brick).
- * Nome/e-mail continuam sendo os do convidado; o documento segue o padrão de testes MP ou MERCADOPAGO_PIX_PAYER_CPF.
- */
-function buildPayerForPix(email, buyerFullName) {
-  const em = typeof email === 'string' ? email.trim() : '';
-  const name = typeof buyerFullName === 'string' ? buyerFullName.trim() : '';
-  let first;
-  let last;
-  if (name.length >= 2) {
-    const parts = name.split(/\s+/);
-    first = parts[0].slice(0, 255);
-    last =
-      parts.length > 1
-        ? parts.slice(1).join(' ').slice(0, 255)
-        : first.slice(0, 255);
-  } else {
-    first = 'Convidado';
-    last = 'Lista de casamento';
-  }
-  const envDigits = String(process.env.MERCADOPAGO_PIX_PAYER_CPF ?? '').replace(/\D/g, '');
-  let identification;
-  if (envDigits.length === 11) {
-    identification = { type: 'CPF', number: envDigits };
-  } else if (envDigits.length === 14) {
-    identification = { type: 'CNPJ', number: envDigits };
-  } else {
-    identification = { type: 'CPF', number: MP_EXAMPLE_TEST_CPF };
-  }
-  return {
-    email: em,
-    first_name: first,
-    last_name: last,
-    identification,
-  };
-}
-
-/**
  * GET /api/registry — presentes já escolhidos + total lua de mel (público)
  */
 paymentRouter.get('/registry', (_req, res) => {
@@ -138,7 +81,7 @@ paymentRouter.get('/registry', (_req, res) => {
 
 /**
  * POST /api/payments/pix
- * Body: { amount, description, payerEmail, externalReference?, buyerName?, guestMessage? }
+ * Body: { amount, description, payerEmail, externalReference?, buyerName? }
  * Presentes: buyerName obrigatório; lua de mel: não usar buyerName na meta
  */
 paymentRouter.post('/payments/pix', async (req, res) => {
@@ -181,13 +124,12 @@ paymentRouter.post('/payments/pix', async (req, res) => {
       transaction_amount: Math.round(value * 100) / 100,
       description: desc,
       payment_method_id: 'pix',
-      payer: buildPayerForPix(email, isLuaDeMel ? '' : buyerTrim),
+      payer: { email },
       external_reference: ext || undefined,
+      notification_url: process.env.PUBLIC_URL
+        ? `${process.env.PUBLIC_URL.replace(/\/$/, '')}/api/webhooks/mercadopago`
+        : undefined,
     };
-    const webhook = mercadopagoNotificationUrl();
-    if (process.env.MERCADOPAGO_PIX_WEBHOOK === 'true' && webhook) {
-      body.notification_url = webhook;
-    }
 
     const created = await createPaymentRest(body);
     const tid = created.point_of_interaction?.transaction_data;
@@ -222,12 +164,7 @@ paymentRouter.post('/payments/pix', async (req, res) => {
       ticket_url: tid?.ticket_url ?? null,
     });
   } catch (e) {
-    const detail = e?.api ?? e;
-    console.error(
-      'create pix error',
-      e?.message,
-      typeof detail === 'object' ? JSON.stringify(detail) : detail
-    );
+    console.error('create pix error', e);
     const msg = e?.cause?.message || e?.message || 'Falha ao criar pagamento';
     return res.status(502).json({ error: msg });
   }
@@ -333,7 +270,9 @@ paymentRouter.post('/payments/card', async (req, res) => {
       payment_method_id: paymentMethodId,
       payer: payerObj,
       external_reference: ext || undefined,
-      notification_url: mercadopagoNotificationUrl(),
+      notification_url: process.env.PUBLIC_URL
+        ? `${process.env.PUBLIC_URL.replace(/\/$/, '')}/api/webhooks/mercadopago`
+        : undefined,
       statement_descriptor: 'LISTA CASAMENTO'.slice(0, 22),
     };
     if (issuerId != null && String(issuerId).trim() !== '') {
