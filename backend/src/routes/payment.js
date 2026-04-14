@@ -52,6 +52,21 @@ function getClient() {
 }
 
 /**
+ * Webhook do MP exige HTTPS. Se PUBLIC_URL estiver como http://..., a API responde:
+ * "http is unavailable for request create_ti". Railway/Vercel expõem sempre HTTPS no domínio público.
+ */
+function mercadopagoNotificationUrl() {
+  const raw = process.env.PUBLIC_URL;
+  if (!raw || typeof raw !== 'string') return undefined;
+  let base = raw.trim().replace(/\/+$/, '');
+  if (base.startsWith('http://')) {
+    base = `https://${base.slice('http://'.length)}`;
+  }
+  if (!base.startsWith('https://')) return undefined;
+  return `${base}/api/webhooks/mercadopago`;
+}
+
+/**
  * Cria pagamento com Authorization explícito (evita edge cases do SDK com headers).
  */
 async function createPaymentRest(body) {
@@ -209,9 +224,7 @@ paymentRouter.post('/payments/pix', async (req, res) => {
       payment_method_id: 'pix',
       payer: buildPayerForPix(email, isLuaDeMel ? '' : buyerTrim),
       external_reference: ext || undefined,
-      notification_url: process.env.PUBLIC_URL
-        ? `${process.env.PUBLIC_URL.replace(/\/$/, '')}/api/webhooks/mercadopago`
-        : undefined,
+      notification_url: mercadopagoNotificationUrl(),
     };
 
     const created = await createPaymentWithSdk(body);
@@ -353,9 +366,7 @@ paymentRouter.post('/payments/card', async (req, res) => {
       payment_method_id: paymentMethodId,
       payer: payerObj,
       external_reference: ext || undefined,
-      notification_url: process.env.PUBLIC_URL
-        ? `${process.env.PUBLIC_URL.replace(/\/$/, '')}/api/webhooks/mercadopago`
-        : undefined,
+      notification_url: mercadopagoNotificationUrl(),
       statement_descriptor: 'LISTA CASAMENTO'.slice(0, 22),
     };
     if (issuerId != null && String(issuerId).trim() !== '') {
