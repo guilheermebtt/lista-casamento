@@ -68,6 +68,29 @@ async function createPaymentRest(body) {
 }
 
 /**
+ * PIX no Brasil: o MP costuma rejeitar ou retornar internal_error com payer só { email }.
+ * Cartão funciona porque o Brick envia nome completo. Aqui espelhamos nome + fallback na lua de mel.
+ */
+function buildPayerForPix(email, buyerFullName) {
+  const em = typeof email === 'string' ? email.trim() : '';
+  const name = typeof buyerFullName === 'string' ? buyerFullName.trim() : '';
+  if (name.length >= 2) {
+    const parts = name.split(/\s+/);
+    const first = parts[0].slice(0, 255);
+    const last =
+      parts.length > 1
+        ? parts.slice(1).join(' ').slice(0, 255)
+        : first.slice(0, 255);
+    return { email: em, first_name: first, last_name: last };
+  }
+  return {
+    email: em,
+    first_name: 'Convidado',
+    last_name: 'Lista de casamento',
+  };
+}
+
+/**
  * GET /api/registry — presentes já escolhidos + total lua de mel (público)
  */
 paymentRouter.get('/registry', (_req, res) => {
@@ -124,7 +147,7 @@ paymentRouter.post('/payments/pix', async (req, res) => {
       transaction_amount: Math.round(value * 100) / 100,
       description: desc,
       payment_method_id: 'pix',
-      payer: { email },
+      payer: buildPayerForPix(email, isLuaDeMel ? '' : buyerTrim),
       external_reference: ext || undefined,
       notification_url: process.env.PUBLIC_URL
         ? `${process.env.PUBLIC_URL.replace(/\/$/, '')}/api/webhooks/mercadopago`
