@@ -45,6 +45,7 @@ export default function PaymentModal({ gift, onClose, onPaymentSuccess }) {
   const brickDomId = `cardBrick_${reactId.replace(/:/g, '')}_${gift?.id ?? 'g'}`;
 
   const [buyerName, setBuyerName] = useState('');
+  const [payerDocument, setPayerDocument] = useState('');
   const [email, setEmail] = useState('');
   const [guestMessage, setGuestMessage] = useState('');
   const [contributionAmount, setContributionAmount] = useState('50');
@@ -71,6 +72,7 @@ export default function PaymentModal({ gift, onClose, onPaymentSuccess }) {
 
   useEffect(() => {
     setBuyerName('');
+    setPayerDocument('');
     setEmail('');
     setGuestMessage('');
     setContributionAmount('50');
@@ -194,6 +196,11 @@ export default function PaymentModal({ gift, onClose, onPaymentSuccess }) {
   async function handlePayPix() {
     setError('');
     if (!validateBase()) return;
+    const docDigits = payerDocument.replace(/\D/g, '');
+    if (docDigits.length !== 11 && docDigits.length !== 14) {
+      setError('Informe CPF (11 dígitos) ou CNPJ (14 dígitos) do pagador — obrigatório para PIX.');
+      return;
+    }
 
     const value = isFlexible ? resolvedAmount : Number(gift.amount);
 
@@ -205,6 +212,7 @@ export default function PaymentModal({ gift, onClose, onPaymentSuccess }) {
           ? 'Contribuição — Lua de mel (lista de casamento)'
           : `Lista de casamento — ${gift.name}`,
         payerEmail: email.trim(),
+        payerDocument,
         externalReference: gift.id,
         guestMessage: guestMessage.trim() || undefined,
       };
@@ -391,6 +399,23 @@ export default function PaymentModal({ gift, onClose, onPaymentSuccess }) {
             <p className="modal-hint--email">
               O Mercado Pago exige um e-mail válido para gerar o PIX ou o cartão. Se não tiver, pode usar o de um
               familiar — serve para o comprovante e avisos do pagamento.
+            </p>
+            <label className="modal-label" htmlFor="payer-document">
+              CPF ou CNPJ do pagador (obrigatório para PIX)
+            </label>
+            <input
+              id="payer-document"
+              type="text"
+              inputMode="numeric"
+              className="modal-input"
+              placeholder="Somente números ou com pontuação"
+              value={payerDocument}
+              onChange={(e) => setPayerDocument(e.target.value)}
+              autoComplete="off"
+            />
+            <p className="modal-hint">
+              Obrigatório pelo Mercado Pago para gerar o PIX. Em testes, pode usar CPF de exemplo do painel (ex.:{' '}
+              <strong>12345678909</strong>).
             </p>
             <label className="modal-label" htmlFor="guest-message">
               Recado para os noivos <span className="modal-optional">(opcional)</span>
