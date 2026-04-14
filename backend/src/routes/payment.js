@@ -68,39 +68,25 @@ async function createPaymentRest(body) {
 }
 
 /**
- * CPF/CNPJ só dígitos — obrigatório no payer para PIX no BR (documentação MP: identification).
+ * PIX no Brasil: o MP costuma rejeitar ou retornar internal_error com payer só { email }.
+ * Cartão funciona porque o Brick envia nome completo. Aqui espelhamos nome + fallback na lua de mel.
  */
-function parsePayerIdentification(raw) {
-  const digits = String(raw ?? '').replace(/\D/g, '');
-  if (digits.length === 11) return { type: 'CPF', number: digits };
-  if (digits.length === 14) return { type: 'CNPJ', number: digits };
-  return null;
-}
-
-/**
- * PIX no Brasil: MP exige e-mail, nome e identification (CPF/CNPJ). Cartão já manda documento via Brick.
- */
-function buildPayerForPix(email, buyerFullName, identification) {
+function buildPayerForPix(email, buyerFullName) {
   const em = typeof email === 'string' ? email.trim() : '';
   const name = typeof buyerFullName === 'string' ? buyerFullName.trim() : '';
-  let first;
-  let last;
   if (name.length >= 2) {
     const parts = name.split(/\s+/);
-    first = parts[0].slice(0, 255);
-    last =
+    const first = parts[0].slice(0, 255);
+    const last =
       parts.length > 1
         ? parts.slice(1).join(' ').slice(0, 255)
         : first.slice(0, 255);
-  } else {
-    first = 'Convidado';
-    last = 'Lista de casamento';
+    return { email: em, first_name: first, last_name: last };
   }
   return {
     email: em,
-    first_name: first,
-    last_name: last,
-    identification,
+    first_name: 'Convidado',
+    last_name: 'Lista de casamento',
   };
 }
 
@@ -118,20 +104,13 @@ paymentRouter.get('/registry', (_req, res) => {
 
 /**
  * POST /api/payments/pix
- * Body: { amount, description, payerEmail, payerDocument, externalReference?, buyerName?, guestMessage? }
- * payerDocument: CPF (11) ou CNPJ (14) só dígitos — obrigatório (MP). Presentes: buyerName obrigatório.
+ * Body: { amount, description, payerEmail, externalReference?, buyerName?, guestMessage? }
+ * Presentes: buyerName obrigatório; lua de mel: não usar buyerName na meta
  */
 paymentRouter.post('/payments/pix', async (req, res) => {
   try {
-    const {
-      amount,
-      description,
-      payerEmail,
-      externalReference,
-      buyerName,
-      guestMessage,
-      payerDocument,
-    } = req.body || {};
+    const { amount, description, payerEmail, externalReference, buyerName, guestMessage } =
+      req.body || {};
     const value = Number(amount);
 
     if (!Number.isFinite(value) || value < 1) {
@@ -143,14 +122,6 @@ paymentRouter.post('/payments/pix', async (req, res) => {
         : null;
     if (!email) {
       return res.status(400).json({ error: 'E-mail do pagador é obrigatório' });
-    }
-
-    const identification = parsePayerIdentification(payerDocument);
-    if (!identification) {
-      return res.status(400).json({
-        error:
-          'Para PIX, informe CPF (11 dígitos) ou CNPJ (14 dígitos) do pagador — exigido pelo Mercado Pago.',
-      });
     }
 
     const ext =
@@ -176,7 +147,7 @@ paymentRouter.post('/payments/pix', async (req, res) => {
       transaction_amount: Math.round(value * 100) / 100,
       description: desc,
       payment_method_id: 'pix',
-      payer: buildPayerForPix(email, isLuaDeMel ? '' : buyerTrim, identification),
+      payer: buildPayerForPix(email, isLuaDeMel ? '' : buyerTrim),
       external_reference: ext || undefined,
       notification_url: process.env.PUBLIC_URL
         ? `${process.env.PUBLIC_URL.replace(/\/$/, '')}/api/webhooks/mercadopago`

@@ -124,7 +124,6 @@ export async function createPixPayment({
   amount,
   description,
   payerEmail,
-  payerDocument,
   externalReference,
   buyerName,
   guestMessage,
@@ -133,7 +132,6 @@ export async function createPixPayment({
     amount,
     description,
     payerEmail,
-    payerDocument,
     externalReference,
   };
   if (buyerName != null) body.buyerName = buyerName;
