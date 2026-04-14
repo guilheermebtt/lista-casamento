@@ -20,6 +20,9 @@ export const paymentRouter = Router();
 const MAX_INSTALLMENTS = 12;
 const MP_PAYMENTS_URL = 'https://api.mercadopago.com/v1/payments';
 
+/** CPF de exemplo usado pelo próprio MP em tutoriais de teste (mesmo do Brick no frontend). */
+const MP_EXAMPLE_TEST_CPF = '12345678909';
+
 /**
  * Access Token do .env (só servidor). Trim evita falha silenciosa; MP retorna erro 5 sem Bearer válido.
  */
@@ -68,25 +71,39 @@ async function createPaymentRest(body) {
 }
 
 /**
- * PIX no Brasil: o MP costuma rejeitar ou retornar internal_error com payer só { email }.
- * Cartão funciona porque o Brick envia nome completo. Aqui espelhamos nome + fallback na lua de mel.
+ * PIX no BR: a API costuma devolver internal_error sem payer.identification (cartão já manda via Brick).
+ * Nome/e-mail continuam sendo os do convidado; o documento segue o padrão de testes MP ou MERCADOPAGO_PIX_PAYER_CPF.
  */
 function buildPayerForPix(email, buyerFullName) {
   const em = typeof email === 'string' ? email.trim() : '';
   const name = typeof buyerFullName === 'string' ? buyerFullName.trim() : '';
+  let first;
+  let last;
   if (name.length >= 2) {
     const parts = name.split(/\s+/);
-    const first = parts[0].slice(0, 255);
-    const last =
+    first = parts[0].slice(0, 255);
+    last =
       parts.length > 1
         ? parts.slice(1).join(' ').slice(0, 255)
         : first.slice(0, 255);
-    return { email: em, first_name: first, last_name: last };
+  } else {
+    first = 'Convidado';
+    last = 'Lista de casamento';
+  }
+  const envDigits = String(process.env.MERCADOPAGO_PIX_PAYER_CPF ?? '').replace(/\D/g, '');
+  let identification;
+  if (envDigits.length === 11) {
+    identification = { type: 'CPF', number: envDigits };
+  } else if (envDigits.length === 14) {
+    identification = { type: 'CNPJ', number: envDigits };
+  } else {
+    identification = { type: 'CPF', number: MP_EXAMPLE_TEST_CPF };
   }
   return {
     email: em,
-    first_name: 'Convidado',
-    last_name: 'Lista de casamento',
+    first_name: first,
+    last_name: last,
+    identification,
   };
 }
 
