@@ -52,8 +52,10 @@ function getClient() {
 }
 
 /**
- * Webhook do MP exige HTTPS. Se PUBLIC_URL estiver como http://..., a API responde:
- * "http is unavailable for request create_ti". Railway/Vercel expõem sempre HTTPS no domínio público.
+ * Webhook do MP exige HTTPS; http:// normalizado para https://.
+ * PIX: em várias contas a API devolve "http is unavailable for request create_ti" ao registrar webhook
+ * mesmo com URL correta — por isso o PIX não envia notification_url por padrão (confirmação via polling no site).
+ * Para reativar webhook no PIX: MERCADOPAGO_PIX_WEBHOOK=true e PUBLIC_URL=https://...
  */
 function mercadopagoNotificationUrl() {
   const raw = process.env.PUBLIC_URL;
@@ -64,6 +66,11 @@ function mercadopagoNotificationUrl() {
   }
   if (!base.startsWith('https://')) return undefined;
   return `${base}/api/webhooks/mercadopago`;
+}
+
+function pixNotificationUrl() {
+  if (process.env.MERCADOPAGO_PIX_WEBHOOK !== 'true') return undefined;
+  return mercadopagoNotificationUrl();
 }
 
 /**
@@ -224,7 +231,7 @@ paymentRouter.post('/payments/pix', async (req, res) => {
       payment_method_id: 'pix',
       payer: buildPayerForPix(email, isLuaDeMel ? '' : buyerTrim),
       external_reference: ext || undefined,
-      notification_url: mercadopagoNotificationUrl(),
+      notification_url: pixNotificationUrl(),
     };
 
     const created = await createPaymentWithSdk(body);
