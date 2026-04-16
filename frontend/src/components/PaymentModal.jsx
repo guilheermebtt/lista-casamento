@@ -15,20 +15,10 @@ const CARD_BRICK_LOAD_TIMEOUT_MS = 25000;
 
 const MP_PUBLIC_KEY = import.meta.env.VITE_MERCADOPAGO_PUBLIC_KEY?.trim();
 
-/** Chave pública TEST- = sandbox; a tabela de cartões de teste exige titular APRO + CPF 12345678909 para aprovar */
-const IS_MP_SANDBOX = Boolean(MP_PUBLIC_KEY?.startsWith('TEST-'));
-
 function messageForCardStatusDetail(detail) {
   if (!detail || typeof detail !== 'string') return 'Pagamento não aprovado.';
-  if (detail === 'cc_rejected_other_reason') {
-    return (
-      'Pagamento recusado pelo ambiente de testes (motivo genérico / antifraude). ' +
-      'Use nome do titular exatamente APRO e CPF 12345678909 no formulário do cartão, ' +
-      'com número/CVV/validade dos cartões de exemplo do painel. Outros nomes simulam recusas.'
-    );
-  }
   if (detail.startsWith('cc_rejected_')) {
-    return `Pagamento recusado (${detail}). Em testes, veja a tabela de cenários em Cartões de teste no Mercado Pago (nome APRO aprova).`;
+    return `Pagamento recusado (${detail}). Confira os dados do cartão/titular ou tente outro cartão.`;
   }
   return detail;
 }
@@ -437,21 +427,6 @@ export default function PaymentModal({ gift, onClose, onPaymentSuccess }) {
               Preencha os dados do cartão e do titular. Parcelamento disponível conforme regras do
               Mercado Pago.
             </p>
-            {IS_MP_SANDBOX && (
-              <p className="modal-hint modal-hint--test">
-                <strong>Modo teste:</strong> para simular pagamento aprovado, use no cartão o nome do
-                titular <strong>APRO</strong> e CPF <strong>12345678909</strong>, com número, CVV e
-                validade dos{' '}
-                <a
-                  href="https://www.mercadopago.com.br/developers/pt/docs/checkout-bricks/additional-content/test-cards"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  cartões de teste
-                </a>
-                . Outros nomes no titular simulam recusas (ex.: OTHE, FUND).
-              </p>
-            )}
             {error && <p className="modal-error">{error}</p>}
             <div className="card-brick-mount">
               {!cardBrickLoaded && (

@@ -250,12 +250,14 @@ paymentRouter.post('/payments/card', async (req, res) => {
       });
     }
 
+    const identificationType = idNumber.length === 14 ? 'CNPJ' : 'CPF';
+
     const payerObj = {
       email,
       first_name: payer.first_name || undefined,
       last_name: payer.last_name || undefined,
       identification: {
-        type: String(payer.identification?.type || 'CPF'),
+        type: identificationType,
         number: idNumber,
       },
     };
