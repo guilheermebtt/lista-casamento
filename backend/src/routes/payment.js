@@ -38,6 +38,13 @@ function getClient() {
   return new MercadoPagoConfig({ accessToken: getMercadoPagoAccessToken() });
 }
 
+function pickFirstNonEmptyString(...values) {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim() !== '') return value.trim();
+  }
+  return '';
+}
+
 /**
  * Cria pagamento com Authorization explícito (evita edge cases do SDK com headers).
  */
@@ -179,7 +186,6 @@ paymentRouter.post('/payments/pix', async (req, res) => {
 paymentRouter.post('/payments/card', async (req, res) => {
   try {
     const {
-      token,
       paymentMethodId,
       issuerId,
       installments,
@@ -192,14 +198,43 @@ paymentRouter.post('/payments/card', async (req, res) => {
       guestMessage,
     } = req.body || {};
 
+    const reqBody = req.body && typeof req.body === 'object' ? req.body : {};
+    const rawToken = pickFirstNonEmptyString(
+      reqBody.token,
+      reqBody.cardToken,
+      reqBody.card_token,
+      reqBody.formData?.token,
+      reqBody.data?.token
+    );
+    const resolvedPaymentMethodId = pickFirstNonEmptyString(
+      paymentMethodId,
+      reqBody.payment_method_id,
+      reqBody.paymentMethodId,
+      reqBody.formData?.payment_method_id,
+      reqBody.formData?.paymentMethodId
+    );
+    const resolvedPayer = payer && typeof payer === 'object' ? payer : reqBody.formData?.payer;
+
+    // DEBUG TEMPORARIO: diagnostico do payload do Brick sem imprimir dados sensiveis.
+    console.log('[card-debug] payload', {
+      topLevelKeys: Object.keys(reqBody),
+      hasFormData: Boolean(reqBody.formData && typeof reqBody.formData === 'object'),
+      formDataKeys:
+        reqBody.formData && typeof reqBody.formData === 'object' ? Object.keys(reqBody.formData) : [],
+      hasToken: Boolean(rawToken),
+      tokenLength: rawToken.length || 0,
+      paymentMethodId: resolvedPaymentMethodId || null,
+      hasPayer: Boolean(resolvedPayer && typeof resolvedPayer === 'object'),
+    });
+
     const inst = Number(installments);
     if (!Number.isFinite(inst) || inst < 1 || inst > MAX_INSTALLMENTS) {
       return res.status(400).json({ error: 'Parcelamento inválido' });
     }
-    if (!token || typeof token !== 'string') {
+    if (!rawToken) {
       return res.status(400).json({ error: 'Token do cartão ausente' });
     }
-    if (!paymentMethodId || typeof paymentMethodId !== 'string') {
+    if (!resolvedPaymentMethodId) {
       return res.status(400).json({ error: 'Bandeira do cartão ausente' });
     }
 
@@ -212,8 +247,8 @@ paymentRouter.post('/payments/card', async (req, res) => {
     const email =
       typeof payerEmail === 'string' && payerEmail.includes('@')
         ? payerEmail.trim()
-        : payer?.email?.includes('@')
-          ? String(payer.email).trim()
+        : resolvedPayer?.email?.includes('@')
+          ? String(resolvedPayer.email).trim()
           : null;
     if (!email) {
       return res.status(400).json({ error: 'E-mail do pagador é obrigatório' });
@@ -237,12 +272,12 @@ paymentRouter.post('/payments/card', async (req, res) => {
       }
     }
 
-    if (!payer || typeof payer !== 'object') {
+    if (!resolvedPayer || typeof resolvedPayer !== 'object') {
       return res.status(400).json({ error: 'Dados do pagador incompletos' });
     }
 
-    const idNumber = payer.identification?.number
-      ? String(payer.identification.number).replace(/\D/g, '')
+    const idNumber = resolvedPayer.identification?.number
+      ? String(resolvedPayer.identification.number).replace(/\D/g, '')
       : '';
     if (!idNumber || (idNumber.length !== 11 && idNumber.length !== 14)) {
       return res.status(400).json({
@@ -254,8 +289,8 @@ paymentRouter.post('/payments/card', async (req, res) => {
 
     const payerObj = {
       email,
-      first_name: payer.first_name || undefined,
-      last_name: payer.last_name || undefined,
+      first_name: resolvedPayer.first_name || undefined,
+      last_name: resolvedPayer.last_name || undefined,
       identification: {
         type: identificationType,
         number: idNumber,
@@ -266,10 +301,10 @@ paymentRouter.post('/payments/card', async (req, res) => {
 
     const body = {
       transaction_amount: value,
-      token: token.trim(),
+      token: rawToken,
       description: desc,
       installments: inst,
-      payment_method_id: paymentMethodId,
+      payment_method_id: resolvedPaymentMethodId,
       payer: payerObj,
       external_reference: ext || undefined,
       notification_url: process.env.PUBLIC_URL
@@ -284,7 +319,7 @@ paymentRouter.post('/payments/card', async (req, res) => {
 
     const created = await createPaymentRest(body);
     const pid = String(created.id);
-    const cardMethodLabel = paymentMethodLabelFromCardMethodId(paymentMethodId);
+    const cardMethodLabel = paymentMethodLabelFromCardMethodId(resolvedPaymentMethodId);
 
     if (isLuaDeMel) {
       recordLuaDeMelPending({
