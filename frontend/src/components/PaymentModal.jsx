@@ -244,12 +244,23 @@ export default function PaymentModal({ gift, onClose, onPaymentSuccess }) {
     finalizeApproved,
   };
 
-  const onCardBrickSubmit = useCallback(async (formData) => {
+  const onCardBrickSubmit = useCallback(async (submitData) => {
     const ctx = cardPayCtxRef.current;
     const g = ctx.gift;
     setError('');
     setPhase('loading');
     try {
+      const formData =
+        submitData && typeof submitData === 'object' && submitData.formData
+          ? submitData.formData
+          : submitData;
+
+      if (!formData?.token || typeof formData.token !== 'string') {
+        throw new Error(
+          'Nao foi possivel gerar o token do cartao. Recarregue a pagina e tente novamente.'
+        );
+      }
+
       const value = ctx.isFlexible ? ctx.resolvedAmount : Number(g.amount);
       const payload = {
         token: formData.token,
