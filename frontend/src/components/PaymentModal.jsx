@@ -30,6 +30,13 @@ const cardCustomization = {
   },
 };
 
+function pickFirstString(...values) {
+  for (const v of values) {
+    if (typeof v === 'string' && v.trim() !== '') return v;
+  }
+  return '';
+}
+
 export default function PaymentModal({ gift, onClose, onPaymentSuccess }) {
   const reactId = useId();
   const brickDomId = `cardBrick_${reactId.replace(/:/g, '')}_${gift?.id ?? 'g'}`;
@@ -250,25 +257,42 @@ export default function PaymentModal({ gift, onClose, onPaymentSuccess }) {
     setError('');
     setPhase('loading');
     try {
-      const formData =
+      const raw =
         submitData && typeof submitData === 'object' && submitData.formData
           ? submitData.formData
-          : submitData;
+          : submitData || {};
 
-      if (!formData?.token || typeof formData.token !== 'string') {
+      const token = pickFirstString(
+        raw?.token,
+        raw?.cardToken,
+        raw?.card_token,
+        raw?.data?.token,
+        raw?.cardFormData?.token
+      );
+      if (!token) {
         throw new Error(
           'Nao foi possivel gerar o token do cartao. Recarregue a pagina e tente novamente.'
         );
       }
 
+      const paymentMethodId = pickFirstString(
+        raw?.payment_method_id,
+        raw?.paymentMethodId,
+        raw?.paymentMethod?.id
+      );
+      const issuerId = raw?.issuer_id ?? raw?.issuerId ?? raw?.issuer?.id;
+      const installments = raw?.installments ?? raw?.payment_method_option_id;
+      const transactionAmount = raw?.transaction_amount ?? raw?.transactionAmount;
+      const payer = raw?.payer || raw?.payerData || {};
+
       const value = ctx.isFlexible ? ctx.resolvedAmount : Number(g.amount);
       const payload = {
-        token: formData.token,
-        paymentMethodId: formData.payment_method_id,
-        issuerId: formData.issuer_id,
-        installments: formData.installments,
-        transactionAmount: formData.transaction_amount,
-        payer: formData.payer,
+        token,
+        paymentMethodId,
+        issuerId,
+        installments,
+        transactionAmount,
+        payer,
         description: ctx.isFlexible
           ? 'Contribuição — Lua de mel (lista de casamento)'
           : `Lista de casamento — ${g.name}`,
