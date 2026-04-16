@@ -14,6 +14,11 @@ const MAX_POLLS = 120;
 const CARD_BRICK_LOAD_TIMEOUT_MS = 25000;
 
 const MP_PUBLIC_KEY = import.meta.env.VITE_MERCADOPAGO_PUBLIC_KEY?.trim();
+const MP_PUBLIC_KEY_MODE = MP_PUBLIC_KEY?.startsWith('TEST-')
+  ? 'TEST'
+  : MP_PUBLIC_KEY?.startsWith('APP_USR-')
+    ? 'PROD'
+    : '';
 
 function messageForCardStatusDetail(detail) {
   if (!detail || typeof detail !== 'string') return 'Pagamento não aprovado.';
@@ -293,6 +298,7 @@ export default function PaymentModal({ gift, onClose, onPaymentSuccess }) {
         installments,
         transactionAmount,
         payer,
+        publicKeyMode: MP_PUBLIC_KEY_MODE || undefined,
         description: ctx.isFlexible
           ? 'Contribuição — Lua de mel (lista de casamento)'
           : `Lista de casamento — ${g.name}`,

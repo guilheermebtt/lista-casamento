@@ -45,6 +45,14 @@ function pickFirstNonEmptyString(...values) {
   return '';
 }
 
+function detectTokenMode(token) {
+  if (typeof token !== 'string') return '';
+  const t = token.trim();
+  if (t.startsWith('TEST-')) return 'TEST';
+  if (t.startsWith('APP_USR-')) return 'PROD';
+  return '';
+}
+
 /**
  * Cria pagamento com Authorization explícito (evita edge cases do SDK com headers).
  */
@@ -196,6 +204,7 @@ paymentRouter.post('/payments/card', async (req, res) => {
       buyerName,
       externalReference,
       guestMessage,
+      publicKeyMode,
     } = req.body || {};
 
     const reqBody = req.body && typeof req.body === 'object' ? req.body : {};
@@ -215,17 +224,8 @@ paymentRouter.post('/payments/card', async (req, res) => {
     );
     const resolvedPayer = payer && typeof payer === 'object' ? payer : reqBody.formData?.payer;
 
-    // DEBUG TEMPORARIO: diagnostico do payload do Brick sem imprimir dados sensiveis.
-    console.log('[card-debug] payload', {
-      topLevelKeys: Object.keys(reqBody),
-      hasFormData: Boolean(reqBody.formData && typeof reqBody.formData === 'object'),
-      formDataKeys:
-        reqBody.formData && typeof reqBody.formData === 'object' ? Object.keys(reqBody.formData) : [],
-      hasToken: Boolean(rawToken),
-      tokenLength: rawToken.length || 0,
-      paymentMethodId: resolvedPaymentMethodId || null,
-      hasPayer: Boolean(resolvedPayer && typeof resolvedPayer === 'object'),
-    });
+    const frontendMode = pickFirstNonEmptyString(publicKeyMode, reqBody.publicKeyMode).toUpperCase();
+    const backendMode = detectTokenMode(getMercadoPagoAccessToken());
 
     const inst = Number(installments);
     if (!Number.isFinite(inst) || inst < 1 || inst > MAX_INSTALLMENTS) {
@@ -236,6 +236,13 @@ paymentRouter.post('/payments/card', async (req, res) => {
     }
     if (!resolvedPaymentMethodId) {
       return res.status(400).json({ error: 'Bandeira do cartão ausente' });
+    }
+    if (frontendMode && backendMode && frontendMode !== backendMode) {
+      return res.status(400).json({
+        error:
+          'Incompatibilidade de credenciais do Mercado Pago: frontend em modo ' +
+          `${frontendMode} e backend em modo ${backendMode}. Use chave pública e Access Token do mesmo ambiente.`,
+      });
     }
 
     const tx = Number(transactionAmount);
@@ -355,6 +362,10 @@ paymentRouter.post('/payments/card', async (req, res) => {
     ) {
       msg =
         'Access Token do Mercado Pago ausente ou inválido no servidor. No arquivo backend/.env use MERCADOPAGO_ACCESS_TOKEN com o token de Credenciais (o mesmo do PIX), salve e reinicie o backend.';
+    }
+    if (typeof msg === 'string' && msg.includes('Card Token not found')) {
+      msg =
+        'Token de cartão inválido para o ambiente atual. Geralmente ocorre quando a Chave pública do frontend e o Access Token do backend estão em ambientes diferentes (TEST vs PROD).';
     }
     return res.status(502).json({ error: msg });
   }
